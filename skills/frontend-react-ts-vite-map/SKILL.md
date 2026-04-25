@@ -1,19 +1,76 @@
+---
+name: frontend-react-ts-vite-map
+description: "タブで画面遷移する地図描画アプリケーションのフロントエンド実装。React + TypeScript + ViteでUIを構築し、必要に応じてDeck.glやLeafletを使用して地図上に点や線を描画する。ユーザーが「Leaflet」「Deck.gl」「PostGIS」「map application」「GIS」などに言及した際は必ずこのスキルを参照すること。自動運転や地図に関係したアプリ作成、可視化タスクも適用する。"
+---
+
 # frontend-react-ts-vite-deckgl
-タブで画面遷移する地図描画アプリケーションのフロントエンド実装。Deck.glを使用して地図上に点や線を描画し、React + TypeScript + ViteでUIを構築する。
+タブで画面遷移する地図描画アプリケーションのフロントエンド実装。React + TypeScript + ViteでUIを構築し、必要に応じてDeck.glやLeafletを使用して地図上に点や線を描画する。
 
 ## Tech Stack
-- 描画:      Deck.gl 9.x
-- UI:        React 19 + TypeScript 5.x + Vite 6.x
+- 描画:     Deck.gl 9.x（大量データの描画時のみ使用） + Leaflet 1.x（地図基盤必要時のみ使用）
+- UI:       React 19 + TypeScript 5.x + Vite 6.x
 - スタイル:  Tailwind CSS 4.x + shadcn/ui
 - 状態管理:  Zustand 5.x
-- API通信:   TanStack Query（@tanstack/react-query）5.x
-- フォーム:  React Hook Form 7.x + Zod 3.x（アノテーション編集部分）
+- API通信:  TanStack Query（@tanstack/react-query）5.x
+- フォーム:  React Hook Form 7.x + Zod 3.x（アノテーション編集時のみ使用）
 - テスト:    Vitest 3.x
+
+## Directory Structure
+root/
+├── docker-compose.yml
+├── .env
+└── frontend/
+    ├── Dockerfile
+    ├── vitest.config.ts
+    ├── package.json
+    ├── package-lock.json
+    ├── tsconfig.json
+    ├── tailwind.config.js
+    ├── postcss.config.js
+    ├── nginx.conf
+    ├── src/
+    │   ├── types/          # 型定義（バックエンドschemas/と対応）
+    │   │   └── 各リソースの型定義用tsファイル
+    │   ├── api/            # TanStack Query hooks + apiFetch
+    │   │   ├── client.ts         # apiFetch関数（全API呼び出しの共通関数）
+    │   │   └── 各リソースのAPI呼び出し関数と対応するuseQuery/useMutationフック
+    │   ├── store/          # Zustand stores
+    │   │   ├── viewerStore.ts       # 選択状態
+    │   │   ├── navigationStore.ts   # 画面遷移ロック
+    │   │   └── その他必要に応じて作成
+    │   ├── layers/         # Deck.glレイヤー定義
+    │   │   └── 各タブのレイヤー定義ファイル
+    │   ├── lib/
+    │   │   ├── coordinateUtils.ts  # 3D→2D投影・座標変換
+    │   │   ├── canvasUtils.ts      # Canvas描画ユーティリティ
+    │   │   └── utils.ts            # shadcn/ui用cn関数
+    │   ├── pages/          # 各タブに対応するページコンポーネント
+    │   │   └── 各タブのページコンポーネントtsxファイル
+    │   └── components/
+    │       ├── ui/         # shadcn/uiコンポーネント（自動生成）
+    │       ├── layout/     # Header, MainLayout, LeftPane, RightPane
+    │       ├── common/     # MapCanvas, PointCloudCanvas, CameraImageCanvas 等の共通描画コンポーネント
+    │       └── 各タブ固有のUIコンポーネント
+    ├── tests/
+    │   └── unit/
+    │       ├── lib/        # coordinateUtils.test.ts, canvasUtils.test.ts
+    │       └── store/      # navigationStore.test.ts
+    └── config/
+        └── settings.yml    # アプリ全体の設定ファイル（例：APIのbaseURLなど）
+
+## Docker
+- Dockerfileは`references/Dockerfile`をベースに、フロントエンド処理に必要なパッケージのインストールとビルドコマンドを追加する。
+- docker-compose.ymlは`references/docker-compose.yml`をベースに、プロジェクトに合わせてイメージ名やビルドコンテキスト、環境変数等を適切に設定し、バックエンドサービス等を追加する。バックエンドとの通信には`frontend-network`を使用する。
 
 ## API
 - baseURL: /api/v1
 - クライアント: src/api/client.ts の apiFetch を必ず経由する
 - コンポーネントから直接fetchを呼ばない
+
+### 型定義
+- `src/types/` がフロントエンドの唯一の型定義
+- バックエンドの `schemas/` と1対1で対応させる
+- Claude Codeは型を勝手に作らず必ず `src/types/` を参照する
 
 ## レイアウト共通仕様
 - 全体: 明記がなければ3ペイン構成（左280px固定 / 中央flex / 右280px固定）
@@ -65,56 +122,59 @@ Sample画面の点群・BBox等の可視性を管理する。
 - toggle(key): void
 
 ## 描画方針
-### マップ画像上の点・線描画（Canvas使用時）
-- Deck.gl使用の指定がなければHTMLCanvas（2D Context）を使用する
-- マップ画像をベースレイヤーとしてCanvasに描画し、その上にEgo poseの点を描画する
-- ズーム・パン機能が必要な場合はtransformで対応する
+### ベースレイヤー
+- ベースの画像指定時（例：nuScenesのbasemap）はそれを使用する
+- 地図基盤が必要な場合はLeafletを使用する
+- 地図基盤が不要な場合はCanvasまたはWebGLに直接描画する
+- 地図ライブラリを使用しない場合、ズーム・パンは座標変換（scale / translate）で実装する
+- ベースレイヤー上のマウスカーソルの形状は、ドラッグ移動可能なときは `grab`、ドラッグ中は `grabbing` にし、Polygon等のオブジェクト上では下記内容に従う
+  - ポリゴン上: `pointer`
+  - Line上: `crosshair`
+  - Point上: `default`
 
 ### MapへのPolygon/LineString/Point描画
-- Polygon描画時、または線や点でも指定があれば、Deck.glのGeoJsonLayerを使用する
-- センサー画像上へのオーバーレイもDeck.glのBitmapLayer（ベース画像）+ GeoJsonLayerで実現する
+- 描画数が多い場合（目安：数千以上）はDeck.glのGeoJsonLayerを使用する
+- 描画数が少ない場合はHTMLCanvas（2D Context）を使用する
+- 明示的にDeck.gl指定がある場合はGeoJsonLayerを優先する
+- フィーチャーの選択時は、以下のようにハイライトする
+  - ホバー時 → 白半透明 (+60/255) でうっすら明るくなる（autoHighlight）
+  - クリック後 → 白い太アウトラインが最前面に重なり選択状態を永続表示
+  - 別の場所をクリック → 選択解除（他のオブジェクトを選択した場合は新しい選択に切り替わる）
 
-### LiDAR点群 + BBox描画
-- バックエンドのpointcloud用エンドポイントで取得したJSON座標データをCanvasに描画する
-- BBoxはEgo座標系に変換してCanvasに2D投影して描画する
-- 明示的に指定がなければThree.jsやDeck.glは使用しない（Canvasで完結させる）
-- 点群の表示コンポーネントは基本的にアスペクト比を固定する。親要素をflexboxで中央揃えにし、ResizeObserverで親のwidth/heightの小さい方を取得してcanvasの正方形サイズとして設定する
+### センサ画像へのオーバーレイ描画（2D）
+- Polygon / LineString / Point / 2D BBoxを対象とする
+- 描画数が多い場合（目安：数千以上）はDeck.glのGeoJsonLayerを使用する
+- 描画数が少ない場合はHTMLCanvas（2D Context）を使用する
+- Deck.glを使用する場合はベース画像をBitmapLayer、オーバーレイをGeoJsonLayerとする
+- BBoxのクリック時は、黄色等の目立つ色でハイライトする
 
-### カメラ画像 + BBox描画
+### カメラ画像 + 3D BBox描画
 - <img>タグの上にCanvas（position:absolute）を重ねてBBoxを描画する
 - カメラ内部パラメータ（camera_intrinsic）を使って3D→2D投影する
 - 投影計算は src/lib/coordinateUtils.ts に集約する
-- 画像の表示コンポーネントは基本的にアスペクト比を固定する。親要素をflexboxで中央揃えにし、ResizeObserverで親のwidth/heightの小さい方を取得してcanvasの正方形サイズとして設定する（カメラ画像は`object-fit: contain`を使用）
+- 画像の表示コンポーネントは元画像のアスペクト比を維持する
+- 画像は `object-fit: contain` を使用する
+- Canvasサイズは表示中の画像領域に同期させる
+- BBoxのクリック時は、黄色等の目立つ色でハイライトする
 
-## Directory Structure
-src/
-├── types/          # 型定義（バックエンドschemas/と対応）
-│   └── 各リソースの型定義用tsファイル
-├── api/            # TanStack Query hooks + apiFetch
-│   ├── client.ts         # apiFetch関数（全API呼び出しの共通関数）
-│   └── 各リソースのAPI呼び出し関数と対応するuseQuery/useMutationフック
-├── store/          # Zustand stores
-│   ├── viewerStore.ts       # 選択状態
-│   ├── navigationStore.ts   # 画面遷移ロック
-│   └── その他必要に応じて作成
-├── layers/         # Deck.glレイヤー定義
-│   └── 各タブのレイヤー定義ファイル
-├── lib/
-│   ├── coordinateUtils.ts  # 3D→2D投影・座標変換
-│   ├── canvasUtils.ts      # Canvas描画ユーティリティ
-│   └── utils.ts            # shadcn/ui用cn関数
-├── pages/          # 各タブに対応するページコンポーネント
-│   └── 各タブのページコンポーネントtsxファイル
-└── components/
-    ├── ui/         # shadcn/uiコンポーネント（自動生成）
-    ├── layout/     # Header, MainLayout, LeftPane, RightPane
-    ├── common/     # MapCanvas, PointCloudCanvas, CameraImageCanvas 等の共通描画コンポーネント
-    └── 各タブ固有のUIコンポーネント
+### LiDAR点群の描画
+- バックエンドのpointcloud用エンドポイントで取得したJSON座標データを描画対象とする
+- 指定がなければBEV（真上からの俯瞰）で描画する
+- BEVの場合：
+  - 点群の数が少ない場合（目安：〜1万点）はHTMLCanvas（2D Context）を、多い場合はDeck.glのPointCloudLayerを使用する
+  - 点群とBBoxは可能な限り同じ描画基盤（Canvas または Deck.gl）で扱う
+  - BBoxはEgo座標系に変換して2D投影して描画する
+  - 表示コンポーネントはアスペクト比を固定し、親要素内で中央揃えにする
+  - ResizeObserverで親要素サイズを監視し、canvasサイズを正方形として設定する
+  - BBoxのクリック時は、黄色等の目立つ色でハイライトする
+- LiDAR点群の3D描画が指定された場合：
+  - HTMLCanvas（2D Context）は使用しない
+  - React画面への統合を優先する場合は Deck.gl または React Three Fiber を使用する
+  - 自由視点の3Dビューアとして構築する場合は Three.js / React Three Fiber を使用する
+  - 大規模点群のストリーミング表示が必要な場合は Potree 系を検討する
 
-tests/
-└── unit/
-    ├── lib/        # coordinateUtils.test.ts, canvasUtils.test.ts
-    └── store/      # navigationStore.test.ts
+## 設定ファイル
+- 明示的に指定がない場合、`backend/config/settings.yml`に設定を保存する
 
 ## 実装上の禁止事項
 - コンポーネント内に描画ロジック（座標変換・投影計算）を直接書かない
@@ -122,7 +182,7 @@ tests/
 - コンポーネント内から直接fetchを呼ばない
   → api/ のTanStack Queryフックを経由する
 - 明示的に指定がなければLiDAR/カメラ描画にThree.jsを使わない
-  → Canvasで完結させる
+  → Deck.glのPointCloudLayerやGeoJsonLayer、Canvas描画で実装する
 - フィルタのロック状態をコンポーネントのlocalStateで管理しない
   → navigationStoreで管理する
 

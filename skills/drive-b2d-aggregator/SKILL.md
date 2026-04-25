@@ -1,3 +1,8 @@
+---
+name: drive-b2d-aggregator
+description: "Bench2Driveが出力する評価結果JSONファイルや画像を読み込んで、人間が解釈しやすいよう集約・表示するためのスキル。ユーザーが「Bench2Drive」「クローズドループ評価」「closed-loop」「End-to-End」「E2E」などに言及した際は必ずこのスキルを参照すること。"
+---
+
 # drive-b2d-aggregator
 Bench2Driveが出力する評価結果JSONファイルや画像を読み込んで、人間が解釈しやすいよう集約・表示するためのスキル
 

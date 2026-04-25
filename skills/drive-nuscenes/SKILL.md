@@ -1,11 +1,6 @@
 ---
 name: drive-nuscenes
-description: "nuScenesデータセットの構造とファイル形式の説明。Use when user uses ."
-description-en: ""
-description-ja: ""
-allowed-tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
-argument-hint: "<entity-name>"
-user-invocable: false
+description: "nuScenesデータセットの構造とファイル形式の説明。ユーザーが「nuScenes」「map expansion」「3D物体検出」「3D object detection」「object tracking」「MOT」「BEVFormer」「UniAD」「Bench2Drive」などに言及した際は必ずこのスキルを参照すること。自動運転のセンサデータ処理・可視化・座標変換タスクにも適用する。"
 ---
 
 ## フォルダ構成とファイル形式
@@ -76,9 +71,11 @@ root
 ```
 
 ### ファイル形式
+各データは以下のファイル形式で保存されている。
 
 |データ種別|ファイル形式|内容|
 |---|---|---|
+|メタデータ|.json|シーン、サンプル、アノテーションなどのメタ情報|
 |basemap|.png|ロケーションごとの地図画像|
 |カメラ画像|.jpg|フレームごとの前方・後方カメラ画像など|
 |LiDAR|.pcd.bin|float32 × 5列|
@@ -100,3 +97,193 @@ TYPE   F F F I        I  F   F  F F        F        I               ...
 `SIZE=4` は `np.float32`（TYPE=F）または `np.int32`（TYPE=I）。
 SIZEとTYPEを組み合わせてdtypeを決定しないと全点が0になる。
 
+## メタデータのフォーマット
+メタデータはテーブルごとにjson形式で保存されており、以下のファイルに分かれています。
+
+```json
+root
+├─ v1.0-trainval  <- trainvalデータセットのメタデータ
+|   ├─ scene.json
+|   ├─ sample.json
+|   ├─ sample_data.json
+|   ├─ sample_annotation.json
+|   ├─ instance.json
+|   ├─ category.json
+|   ├─ attribute.json
+|   ├─ visibility.json
+|   ├─ sensor.json
+|   ├─ calibrated_sensor.json
+|   ├─ ego_pose.json
+|   ├─ log.json
+|   └─ map.json
+├─ v1.0-mini  <- miniデータセットのメタデータ（詳細は省略）
+└─ v1.0-test  <- testデータセットのメタデータ（詳細は省略）
+```
+
+各テーブルの概要を以下に示します。
+
+||ファイル（テーブル）名|概要|レコード数(mini)|レコード数(trainval)|
+|---|---|---|---|---|
+|1|scene|シーン（連続した一連の運転データ）の一覧||850|
+|2|sample|シーン内のキーフレーム一覧||34,149|
+|3|sample_data|センサデータ一覧(キーフレームだけでなく、sweepsのものも含まれる)||2,631,083|
+|4|sample_annotation|物体アノテーション(3次元バウンディングボックスと分類ラベル)||1,166,187|
+|5|instance|物体インスタンス(複数キーフレームに写る同一の物体)の一覧||64,386|
+|6|category|物体カテゴリ(e.g. vehicle, human)||32|
+|7|attribute|アノテーションの状態ラベルの一覧(e.g. moving, stopped)||8|
+|8|visibility|アノテーションのどれくらいの割合のピクセルがカメラに写っているか||4|
+|9|sensor|センサ一覧||12|
+|10|calibrated sensor|センサのキャリブレーション情報(キャリブレーションの度に記録される)||10,200|
+|11|ego_pose|各キーフレームでの自車の姿勢情報(sample_dataと一対一対応)||2,631,083|
+|12|log|ログ（一度の連続した運転単位。シーンの上位概念。車両・マップの紐づけに使える）の一覧||68|
+|13|map|マップ情報（紐づくログの一覧の参照が主目的）||4|
+
+### メタデータの各フィールドの依存関係
+references/schemas_nuscenes.py（SQLAlchemyのスキーマ）も参照すること。以下はフィールド間の依存関係を表したER図。
+
+```mermaid
+erDiagram
+
+    %% ======================
+    %% Vehicle
+    %% ======================
+    log {
+        string logfile
+        string vehicle
+        datetime date_captured
+        string location
+    }
+
+    map {
+        string log_tokens
+        string category
+        string filename
+    }
+
+    sensor {
+        string channel
+        string modality
+    }
+
+    calibrated_sensor {
+        string sensor_token
+        float translation
+        float rotation
+        float camera_intrinsic
+    }
+
+    %% ======================
+    %% Extraction
+    %% ======================
+    scene {
+        string name
+        string description
+        string log_token
+        int nbr_samples
+        string first_sample_token
+        string last_sample_token
+    }
+
+    sample {
+        datetime timestamp
+        string scene_token
+        string next
+        string prev
+    }
+
+    sample_data {
+        string sample_token
+        string ego_pose_token
+        string calibrated_sensor_token
+        string filename
+        string fileformat
+        int width
+        int height
+        datetime timestamp
+        bool is_key_frame
+        string next
+        string prev
+    }
+
+    ego_pose {
+        float translation
+        float rotation
+        datetime timestamp
+    }
+
+    %% ======================
+    %% Annotation
+    %% ======================
+    instance {
+        string category_token
+        int nbr_annotations
+        string first_annotation_token
+        string last_annotation_token
+    }
+
+    sample_annotation {
+        string sample_token
+        string instance_token
+        string attribute_tokens
+        string visibility_token
+        float translation
+        float size
+        float rotation
+        int num_lidar_pts
+        int num_radar_pts
+        string next
+        string prev
+    }
+
+    lidarseg {
+        string filename
+        string sample_data_token
+    }
+
+    %% ======================
+    %% Taxonomy
+    %% ======================
+    category {
+        string name
+        string description
+        int index
+    }
+
+    attribute {
+        string name
+        string description
+    }
+
+    visibility {
+        int level
+        string description
+    }
+
+    %% ======================
+    %% Relationships
+    %% ======================
+
+    log ||--o{ scene : "has"
+    log ||--o{ map : "has"
+
+    scene ||--o{ sample : "contains"
+    sample ||--o{ sample_data : "has"
+    sample ||--o{ sample_annotation : "has"
+
+    sample_data ||--|| ego_pose : "uses"
+    sample_data ||--|| calibrated_sensor : "uses"
+
+    calibrated_sensor ||--|| sensor : "belongs_to"
+
+    sample_annotation ||--|| instance : "belongs_to"
+    instance ||--|| category : "classified_as"
+
+    sample_annotation ||--o{ attribute : "has"
+    sample_annotation ||--|| visibility : "has"
+
+    sample_data ||--o{ lidarseg : "has"
+```
+
+### メタデータの各フィールドの内容とフォーマット
+
+`references/metadata_fields.md`を参照すること

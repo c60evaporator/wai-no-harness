@@ -1,4 +1,9 @@
-# carla-leaderboard-aggregator
+---
+name: drive-leaderboard-aggregator
+description: "CARLA Leaderboard2.0が出力する評価結果JSONファイルを読み込んで、人間が解釈しやすい形式に集約するスキル。ユーザーが「Bench2Drive」「クローズドループ評価」「closed-loop」「End-to-End」「E2E」などに言及した際は必ずこのスキルを参照すること。"
+---
+
+# drive-leaderboard-aggregator
 CARLA Leaderboard2.0が出力する評価結果JSONファイルを読み込んで、人間が解釈しやすい形式に集約するスキル
 
 ## When to Activate

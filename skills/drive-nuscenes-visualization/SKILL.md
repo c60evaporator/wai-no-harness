@@ -1,17 +1,15 @@
 ---
 name: drive-nuscenes-visualization
-description: "nuScenesデータセットの可視化に関する説明。特にフロントエンドでの描画時の注意点を中心に説明。Use when user visulizes the nuScenes dataset, especially when user mentions frontend rendering."
-description-en: "Description of the visualization of the nuScenes dataset. Use when user mentions frontend rendering."
-description-ja: "nuScenesデータセットの可視化に関する説明。特にフロントエンドでの描画時の注意点を中心に説明。"
-allowed-tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
-argument-hint: "<entity-name>"
-user-invocable: false
+description: "nuScenesおよびMap Expansionデータを可視化する際の座標変換に関する説明。ユーザーが「nuScenes」「map expansion」「nuScenes map」などに言及した際は必ずこのスキルを参照すること。自動運転の地図処理・可視化・座標変換タスクにも適用する。"
 ---
 
-## 各データの座標変換
-グローバル座標（3Dバウンディングボックス等のアノテーションが従う座標系）と、各データの座標系との変換について、フロントエンドでの描画を前提に説明する。
+# drive-nuscenes-visualization
+nuScenesおよびMap Expansionデータを可視化する際の座標変換に関する説明
 
-### basemapの座標系
+## 各データの座標変換
+グローバル座標（3Dバウンディングボックス等のアノテーションが従う座標系）と、各データの座標系との変換について、フロントエンド（React＋TypeScript）での描画を前提に説明する。
+
+### basemap画像の座標系
 
 **座標系の定義**
 
@@ -290,3 +288,29 @@ pt = lidar_rot.inverse.rotate(pt - lidar_trans)
 - クエリパラメータ `ref_sensor_token`（LIDAR_TOPのcalibrated_sensor_token）をフロントから渡し、バックエンドで変換する
 - RADARにはBBoxアノテーションを重ねない（アノテーションはLiDAR基準のため座標系が異なる）
 - RADARは点数が少ない（数十点）ためpointSizeを大きく（4px程度）設定するとよい
+
+### Map ExpansionとDeck.gl（WGS84）との組み合わせ
+
+Map ExpansionのGeoJSONをDeck.glで表示する場合、ローカルメートル座標→WGS84経緯度への変換が必要。
+各ロケーションのGPS原点を基準に線形近似で変換する：
+
+```python
+# backend/app/converters/geometry.py と同じ変換
+lat = lat0 + y / 111320.0
+lon = lon0 + x / (111320.0 * cos(radians(lat0)))
+```
+
+GPS原点（lat0, lon0）はロケーションごとに固定値を持つ（settings.yml等の設定ファイルで管理）。
+
+**BitmapLayerのboundsはcanvas_edge全体から計算する**
+
+Deck.glのBitmapLayerでbasemapを表示する際、
+`bounds` にGeoJSONポリゴンの実際の範囲を使うと
+ポリゴンはマップの一部しかカバーしないためbasemapとずれる。
+`(0,0)` と `(canvasW, canvasH)` をそれぞれWGS84に変換した値を使う：
+
+```typescript
+const sw = localToWgs84(0,       0,       location)  // 南西
+const ne = localToWgs84(canvasW, canvasH, location)  // 北東
+bounds = [sw[0], sw[1], ne[0], ne[1]]  // [west, south, east, north]
+```

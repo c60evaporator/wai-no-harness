@@ -1,0 +1,15 @@
+services:
+  frontend:
+    image: {please specify the image name for the frontend service}
+    build:
+      context: ./frontend
+      target: ${APP_ENV:-development}
+    networks:
+      - frontend-network
+    depends_on:
+      api:
+        condition: service_started
+
+networks:
+  frontend-network:
+    driver: bridge
