@@ -21,6 +21,7 @@ root/
 ├── .env
 └── frontend/
     ├── Dockerfile
+    ├── .env.production  # VITE_API_BASE_PATHでバックエンドAPIのベースパスを指定（AWS環境用。ローカル環境では使用しない）
     ├── vitest.config.ts
     ├── package.json
     ├── package-lock.json
@@ -66,6 +67,7 @@ root/
 - baseURL: /api/v1
 - クライアント: src/api/client.ts の apiFetch を必ず経由する
 - コンポーネントから直接fetchを呼ばない
+- パスの末尾は、`/`なしで統一する（例：`/api/v1/scenes`、`/api/v1/scenes/{scene_id}/samples`）
 
 ### 型定義
 - `src/types/` がフロントエンドの唯一の型定義

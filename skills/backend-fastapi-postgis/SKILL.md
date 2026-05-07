@@ -25,6 +25,8 @@ root/
 │   ├── app/
 │   │   ├── main.py                         # FastAPIアプリ初期化・ルーター登録
 │   │   ├── dependencies.py                 # DBセッションなど共通依存関係
+│   │   ├── lib/                            # ユーティリティ関数
+│   │   │   └── storage.py                  # ストレージ操作（ローカルファイル・S3）
 │   │   ├── core/          # アプリ全体のコアロジック
 │   │   │   ├── config.py                   # 環境変数・設定（Pydantic Settings）
 │   │   │   └── logging.py                  # ロギング設定
@@ -64,7 +66,7 @@ root/
 │   └── config/
 │       └── settings.yml    # アプリ全体の設定ファイル
 └── db/                     # DB関連のファイルをまとめるディレクトリ
-    └── initdb.d/           # DB初期化用のスクリプトを配置するディレクトリ。docker-compose.ymlでマウントして使用する。   
+    └── initdb.d/           # DB初期化用のスクリプトを配置するディレクトリ。docker-compose.ymlでマウントして使用する。
         ├── 01_init.sh
         └── 02-init.sql
 
@@ -72,7 +74,9 @@ root/
 - APIサーバーのDockerfileは`references/Dockerfile`をベースに、バックエンド処理に必要なパッケージのインストールとビルドコマンドを追加する。
 - docker-compose.ymlは`references/docker-compose.yml`をベースにapi・migrations・db（PostGIS）・pgadminサービスを構築し、フロントエンドサービス等を追加する。プロジェクトに合わせてイメージ名やビルドコンテキスト、環境変数等を適切に設定する。
 - バックエンドとフロントエンドの通信には`frontend-network`、バックエンドとDBの通信には`backend-network`、DBとpgadminの通信には`pgadmin-network`を使用する。
+- apiコンテナからDBへの接続は、`references/config.py`をベースとして作成した`backend/app/core/config.py`で環境変数を読み込んで接続用のURLを作成する。
 - FastAPIに `redirect_slashes=False` を設定する（設定しないとViteプロキシが307リダイレクトを追従できずCORSエラーになる）
+- DB初期化用のスクリプトは `db/initdb.d/` に配置し、docker-compose.ymlでPostGISコンテナの `/docker-entrypoint-initdb.d/` にマウントして使用する。初回起動時にこれらのスクリプトが実行され、PostGIS拡張の有効化やDDLの作成を行う。
 
 ## DB
 ### ジオメトリ型のルール
@@ -113,6 +117,8 @@ def wkb_to_geojson(wkb) -> dict:
 ## API Design
 ### 共通ルール
 - prefix: `/api/v1`
+- ただし、ヘルスチェック用の`/health`は例外的にプレフィックスなしで実装する
+- パスの末尾は、`/`なしで統一する（例：`/api/v1/scenes`、`/api/v1/scenes/{scene_id}/samples`）
 - レスポンスは常にPydantic schemaを通す
 - ジオメトリフィールドはGeoJSON形式で返す
 - エラーは `{"detail": "..."}`形式で返す
@@ -125,6 +131,17 @@ def wkb_to_geojson(wkb) -> dict:
 
 ### ファイルの配信
 画像、点群データなどはDBではなくファイルストレージ（ローカルの `storage/` ディレクトリやS3など）に保存し、APIでは以下の形式で返す
+
+#### ローカルとAWSの切り替え
+- ローカル環境とAWS環境の切り替えロジックは `app/lib/storage.py`（`references/storage.py`を参考に作成）に実装し、APIエンドポイントやDBアクセスロジックからはストレージの実装を意識せずに `read_file(relative_path)` を呼び出すだけでファイルを取得できるようにする
+- ローカル環境
+  - `settings.LOCAL_DATAROOT` を基準にストレージからファイルを読み込む
+  - DB接続はSSLなしでローカルのPostGISコンテナに接続する
+  - swagger, redoc公開
+- AWS環境
+  - `settings.S3_DATA_BUCKET` を基準にS3からファイルを読み込む
+  - DB接続はSSLありでRDSのエンドポイントに接続する
+  - swagger, redoc非公開
 
 #### 画像
 - ファイルストレージに静的に保持されている画像（センサ画像、地図のベース画像等）はFileResponseで返す
@@ -150,6 +167,14 @@ LiDAR、ミリ波レーダー、ステレオカメラ等の点群データは、
 - 明示的に指定がない場合、`backend/config/settings.yml`に設定を保存する
 - ロケーションごとのGPS原点（`map_origins`）、データルートパス、DB接続情報等を管理する
 - 設定値は `backend/app/core/app_config.py` 等の設定モジュールで読み込み、各モジュールから直接YAMLを読まない
+
+## 環境変数
+- 環境変数は`.env`を用いて管理し、`backend/app/core/config.py` で読み込む
+- 具体的な環境変数は`references/.env.example`をベースに、プロジェクトに合わせて必要な変数を追加する
+- DEPLOY_ENVはローカル環境とAWS環境の切替に使用。ローカルでは `local`、AWSでは `aws` を設定
+- APP_ENVはアプリケーションの実行環境を示すために使用（ローカルを前提としており、AWS使用時はこの環境変数は使わない）。開発環境向け`development`と本番環境向け`production`の違いは以下
+  - development: ホットリロード有効（Node + Vite 開発サーバー起動）、フロントエンド公開ポート3000、バックエンドrootユーザー、pgAdmin有効、Uvicorn --reload
+  - production: ホットリロード無効（ビルド済み静的ファイルをNginx配信）、フロントエンド公開ポート80、バックエンドappuser、pgAdminなし、Uvicorn --workers 4
 
 ## 実装上の制約
 - SQLAlchemy 2.xの `Session` は `Annotated` + `Depends` でDI
