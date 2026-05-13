@@ -73,6 +73,7 @@ root/
 ## Docker
 - APIサーバーのDockerfileは`references/Dockerfile`をベースに、バックエンド処理に必要なパッケージのインストールとビルドコマンドを追加する。
 - docker-compose.ymlは`references/docker-compose.yml`をベースにapi・migrations・db（PostGIS）・pgadminサービスを構築し、フロントエンドサービス等を追加する。プロジェクトに合わせてイメージ名やビルドコンテキスト、環境変数等を適切に設定する。
+- apiとmigrationsサービスは同一のイメージを使用し、コマンドだけ切り替える。マイグレーションはAlembicを使用して実行する。
 - バックエンドとフロントエンドの通信には`frontend-network`、バックエンドとDBの通信には`backend-network`、DBとpgadminの通信には`pgadmin-network`を使用する。
 - apiコンテナからDBへの接続は、`references/config.py`をベースとして作成した`backend/app/core/config.py`で環境変数を読み込んで接続用のURLを作成する。
 - FastAPIに `redirect_slashes=False` を設定する（設定しないとViteプロキシが307リダイレクトを追従できずCORSエラーになる）
@@ -90,7 +91,7 @@ root/
   - 変換ロジックは `app/converters/geometry.py` に集約する
   - RouterやCRUDに変換コードを直接書かない
 
-### geometry.pyの変換パターン（参考実装）
+#### geometry.pyの変換パターン（参考実装）
 ```python
 # GeoJSON dict → WKBElement（DB保存時）
 from geoalchemy2.shape import from_shape
@@ -106,6 +107,12 @@ def wkb_to_geojson(wkb) -> dict:
     return to_shape(wkb).__geo_interface__
 ```
 
+### DBからAPIスキーマへの変換
+- DBへのクエリは`app/repositories/`に集約する。`app/core/config.py`で構築したasyncpgベースの`DATABASE_URL`を使用して`app/db/session.py`で非同期セッションファクトリを作成し、`app/dependencies.py`でFastAPIの依存関係として提供する。
+- AWS環境（RDS）ではSSL必須のため、`references/config.py`を参考に`DATABASE_URL`に`?ssl=require`を付与する
+- DBからAPIスキーマへの変換は、`app/converters/` に集約する
+- ジオメトリ変換は `geometry.py` にまとめる
+
 ### インデックス
 - 明確に検索クエリがパフォーマンスのボトルネックになることが想定される場合、適切なインデックス、またはPostGISの空間インデックスを作成する
 - パフォーマンスが問題になるか微妙なケースでは、インデックスを作成せずにフロントエンドまで実装してみて、必要に応じてインデックスを追加する
@@ -113,6 +120,7 @@ def wkb_to_geojson(wkb) -> dict:
 ### Alembicマイグレーション
 - `alembic revision --autogenerate` でマイグレーションファイルを生成し、PostGIS拡張の有効化（`CREATE EXTENSION IF NOT EXISTS postgis`）は初回マイグレーションに含める
 - DBロールを分ける場合（DDL用・DML用）、`initdb.d` スクリプトでDML用ロールを作成してから Alembic でDDLを実行する
+- Alembicではpsycopg2使用＆SSL無効化する。asyncpg使用＆SSL有効のapiコンテナとイメージを共通化するため、`env.py`で`db_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql+psycopg2://").replace("?ssl=require", "")`としてDB接続URLを変換する
 
 ## API Design
 ### 共通ルール
@@ -147,12 +155,23 @@ def wkb_to_geojson(wkb) -> dict:
 - ファイルストレージに静的に保持されている画像（センサ画像、地図のベース画像等）はFileResponseで返す
 - 動的に生成するコンテンツやリアルタイムデータはStreamingResponseで返す
 - 明示的に指定がなければ、大型画像（数十MB）はPillowで長辺4096px以下にリサイズしてから返す（例：`img.thumbnail((4096, 4096), Image.LANCZOS)`）
+  - 特に大型画像の種類が限られる場合、リサイズ処理を流用して高速化できるように、`references/process_big_image.py`を参考にメモリキャッシュを実装することも検討する
+- AWS環境かつ画像を多数表示するページ向けのエンドポイントでは、バックエンドはURLを返すだけにして、クライアントが直接S3/CloudFrontから画像を取得する方式を検討する。`references/storage.py`も参考にしつつ、ユースケースに応じて以下の方法を使い分ける
+
+|ユースケース|手法|バックエンド参考コード|フロントエンド参考コード
+|---|---|---|---|
+|公開データ|CloudFront固定URLで返してキャッシュ高速化|`reference/presigned_url_response.py`|
+|非公開データ（同一端末中心のアクセスの場合）|S3署名付きURLで返す。キャッシュが効きにくいので基本は以下の署名付きCookieを推奨|
+|非公開データ（複数端末アクセスがある場合）|CloudFront署名付きCookieで返してキャッシュ高速化|
+
+と署名付きURLを生成し、クライアントが直接S3から画像を取得する方式も検討する（APIサーバーの負荷軽減のため）
 
 #### 点群データ
 LiDAR、ミリ波レーダー、ステレオカメラ等の点群データは、明示的な指定がなければPotree形式に変換せず`.pcd`、`.pcd.bin`、`.ply`等を以下の形式で直接配信する。
 - フォーマット: float32 × 5列（x, y, z, intensity, ring_index）
 - DBの fileformat カラム値: `pcd`
 - APIレスポンス: JSON形式 `{"points": [[x,y,z,intensity], ...], "num_points": N}`
+- 点群サイズが大きい場合、`app.add_middleware(GZipMiddleware, minimum_size=1000)`のようにレスポンスをgzip圧縮して高速化することも検討する
 
 ### 地図のベース画像とWGS84座標の対応
 - 地図のベース画像はローカルメートル座標系で格納されることが多い。Deck.gl等のWGS84ベースのライブラリで使う場合はロケーションごとのGPS原点を基準に線形近似で変換する：

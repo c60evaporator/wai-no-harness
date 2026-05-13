@@ -8,6 +8,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    DEPLOY_ENV: str = "local"  # "local" or "aws"
+    CLOUDFRONT_DATA_URL: str = ""  # Only used for AWS deployments, can be left empty for local development
+    S3_DATA_BUCKET: str = ""  # Only used for AWS deployments, can be left empty for local development
     NUSCENES_DATAROOT: str = "/data/nuscenes"
     CORS_ORIGINS: list[str] = ["*"]
     DB_ECHO: bool = False
@@ -20,11 +23,13 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str
     @model_validator(mode="after")
     def build_database_url(self) -> "Settings":
+        ssl_suffix = "?ssl=require" if self.DEPLOY_ENV == "aws" else ""
         self.DATABASE_URL = (
             f"postgresql+asyncpg://"
             f"{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}"
             f"/{self.POSTGRES_DB}"
+            f"{ssl_suffix}"  # AWS RDS で SSL 接続を強制するためのクエリパラメータ。ローカル開発では不要なので条件付きで追加。
         )
         return self
 

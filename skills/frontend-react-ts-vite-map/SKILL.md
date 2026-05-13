@@ -68,6 +68,8 @@ root/
 - クライアント: src/api/client.ts の apiFetch を必ず経由する
 - コンポーネントから直接fetchを呼ばない
 - パスの末尾は、`/`なしで統一する（例：`/api/v1/scenes`、`/api/v1/scenes/{scene_id}/samples`）
+- 点群はJSON形式 `{"points": [[x,y,z,intensity], ...], "num_points": N}`のレスポンスを前提とする
+  - サイズが大きい場合、useQueryの `staleTime` と `gcTime` をInfinity（あるいは大きな値）にしてキャッシュを永続化することも検討する
 
 ### 型定義
 - `src/types/` がフロントエンドの唯一の型定義
@@ -189,10 +191,8 @@ Sample画面の点群・BBox等の可視性を管理する。
   → navigationStoreで管理する
 
 ## よくある実装ミスと対処法
-### Viteプロキシのリダイレクト追従
-FastAPI等のバックエンドはURLの末尾スラッシュ有無で307リダイレクトを返すことがある。
-Viteのdevサーバープロキシはデフォルトでリダイレクトを追従しないため、
-ブラウザが `api:8000` に直接リクエストしてCORSエラーになる。
+### 開発環境でリダイレクト追従が必要な場合
+既存APIとの互換性などで一時的にリダイレクトが発生する場合は、Vite proxyに`followRedirects: true`を設定することで回避できる場合がある。
 
 ```typescript
 // vite.config.ts
@@ -205,11 +205,6 @@ server: {
     },
   },
 },
-```
-
-FastAPI側で根本対処する場合：
-```python
-app = FastAPI(redirect_slashes=False)
 ```
 
 ### Radix UI の Select.Item に空文字を渡さない
