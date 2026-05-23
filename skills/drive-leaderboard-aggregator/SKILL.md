@@ -6,13 +6,8 @@ description: "CARLA Leaderboard2.0が出力する評価結果JSONファイルを
 # drive-leaderboard-aggregator
 CARLA Leaderboard2.0が出力する評価結果JSONファイルを読み込んで、人間が解釈しやすい形式に集約するスキル
 
-## When to Activate
-- CARLA Leaderboard2.0の結果を集計するとき
-
 ## Input Format
-
 CARLA Leaderboard2.0は、プロセスを実行したGPUごとに以下のようなフォルダ構成で評価結果を記録
-
 ```
 出力先フォルダ
 ├── eval_0.json
@@ -157,7 +152,53 @@ CARLA Leaderboard2.0は、プロセスを実行したGPUごとに以下のよう
 }
 ```
 
-### 各違反の詳細とペナルティ
+### スコアの詳細
+scoresに記載されるルートごとのスコアは、それぞれ以下の意味を持つ
+| フィールド | 例 | 意味 |
+|---|---|---|
+| `score_route` | 100 | ルート完走率（%）。完走=100、途中終了=走行距離/全長×100。詳細は後述 |
+| `score_penalty` | 0.6 | 違反による減衰係数。違反なし=1.0。計算式は後述 |
+| `score_composed` | 60.0 | **Driving Score** = `score_route × score_penalty` |
+
+#### score_routeの計算詳細
+`RouteCompletionTest` クラス（atomic_criteria.py）で、以下方法で計算：
+- ルートのウェイポイント列に対して、自車がウェイポイントの前方ベクトルと同方向に位置する（内積 > 0）なら通過と判定
+score_route = 通過したウェイポイントまでの累積距離 / ルート全長 × 100
+
+##### status（ルートの終了状態）の種類
+ルートを完走できたかどうかとその原因は"status"フィールドに記載される。以下のように、完走、シナリオ失敗系、例外発生系に分けられる。完走（`Perfect`,`Completed`）以外になったルートが`exceptions`フィールドに記載される
+
+・完走
+| status | 意味 |
+|---|---|
+| `Perfect` | シナリオの目標を完全達成 |
+| `Completed` | ルート完走（途中で強制終了なし） |
+
+・シナリオ失敗系
+|終了原因|status|判定用クラス|判定基準|
+|---|---|---|---|
+|ルートタイムアウト|Failed - Agent timed out|RouteTimeoutBehavior|初期300秒 + 進行距離に応じて加算（制限速度の10%で走行した場合の所要時間）|
+|エージェント停止|Failed - Agent got blocked|AgentBlockedTest|速度0.1m/s以下が60秒継続|
+|ルート逸脱|Failed - Agent deviated from the route|ActorLanesTest|ルート外を30m以上走行|
+|正常完走|Perfect(違反あり) / Completed (違反なし)|RouteCompletionTest|99%以上通過 かつ ゴール10m以内|
+
+・例外発生系
+|status|判定基準|entry_status|
+|---|---|---|
+|Failed - TickRuntime|TickRuntimeError（tick_count > 4000）|Started|
+|Failed - Agent crashed|AIエージェント内部でPython例外が発生|Started|
+|Failed - Simulation crashed|CARLAサーバー側の例外（接続切れ等）|Crashed|
+|Failed - Agent's sensors were invalid|センサ構成がtrack制約に違反|Rejected|
+|Failed - Agent couldn't be set up|エージェントの初期化失敗（モデルロードエラー等）|Started|
+
+#### score_penaltyの計算式
+`score_penalty`は、初期値`score_penalty = 1.0`から、違反が発生するたびに違反の種類に応じたpenalty乗数$p_i$に従い、乗算的に減衰
+
+$$\text{score\_penalty} = \prod_{i} p_i$$
+
+例えば歩行者衝突（$p_i=0.5$）が2回、車両衝突（$p_i=0.6$）が1回起こった場合、$0.5 \times 0.5 \times 0.6 = 0.15$が`score_penalty`になる
+
+##### 違反の種類とペナルティの詳細
 `global_record.infractions`や`records.infractions`フィールドに記載される違反の詳細は以下（penalty乗数は動的に変更できるが、ここではBench2Driveでの値を記載）
 
 | フィールド | Bench2Driveでのpenalty乗数 | 意味 |
@@ -178,72 +219,8 @@ CARLA Leaderboard2.0は、プロセスを実行したGPUごとに以下のよう
 > `outside_route_lanes`はpenalty乗数$p_i = 1 - \frac{\text{逸脱％}}{100}$と逸脱割合に応じて動的に計算されます
 > `route_dev`、`vehicle_blocked`、`route_timeout`はpenaltyなし（走行を途中で打ち切ることで間接的に`score_route`を下げる）
 
-### status（ルートの終了状態）の種類
-`Perfect`,`Completed`以外になったルートが`exceptions`フィールドに記載される
-
-| 値 | 意味 |
-|---|---|
-| `Perfect` | シナリオの目標を完全達成 |
-| `Completed` | ルート完走（途中で強制終了なし） |
-| `Failed - TickRuntime` | シミュレーションのtick処理でランタイムエラー（エージェントのPython例外等） |
-| `Failed - Agent got blocked` | エージェントが180秒以上停止 |
-| `Failed - Agent couldn't be set up` | エージェントの初期化に失敗（モデルロードエラー等） |
-
-### 各スコアの詳細
-| フィールド | 例 | 意味 |
-|---|---|---|
-| `score_route` | 100 | ルート完走率（%）。完走=100、途中終了=走行距離/全長×100。詳細は後述 |
-| `score_penalty` | 0.6 | 違反による減衰係数。違反なし=1.0。計算式は後述 |
-| `score_composed` | 60.0 | **Driving Score** = `score_route × score_penalty` |
-
-#### score_routeの計算詳細
-`RouteCompletionTest` クラス（atomic_criteria.py）で計算：
-
-```
-ルートのウェイポイント列に対して、自車位置からの内積で通過判定
-→ 通過したウェイポイントまでの累積距離 / ルート全長 × 100
-```
-
-- 各ウェイポイント間の距離を累積
-- 自車がウェイポイントの前方ベクトルと同方向に位置する（内積 > 0）なら通過と判定
-- 最終地点に十分近ければ100%
-
-#### score_penaltyの計算式
-`score_penalty`は、初期値`score_penalty = 1.0`から、違反が発生するたびに違反の種類に応じたpenalty乗数$p_i$に従い、乗算的に減衰
-
-$$\text{score\_penalty} = \prod_{i} p_i$$
-
-例えば歩行者衝突（$p_i=0.5$）が2回、車両衝突（$p_i=0.6$）が1回起こった場合、$0.5 \times 0.5 \times 0.6 = 0.15$が`score_penalty`になる
-
 ### 天候ID一覧
-
-| ID | 時間帯 | 雲量 | 雨 | 路面水 | 濡れ | 風 | 霧 | 概要 |
-|---|---|---|---|---|---|---|---|---|
-| **0** | 昼(90°) | 5 | 0 | 0 | 0 | 10 | 2 | ☀️ 快晴・正午 |
-| **1** | 夕方(15°) | 5 | 0 | 0 | 0 | 10 | 2 | 🌅 快晴・夕方 |
-| **2** | 昼(45°) | 20 | 30 | 50 | 0 | 30 | 3 | 🌦️ 小雨 |
-| **3** | 昼(45°) | 60 | 60 | 60 | 0 | 60 | 3 | 🌧️ 中雨 |
-| **5** | 昼(45°) | 80 | 0 | 50 | 20 | 10 | 3 | ☁️ 曇り・路面濡れ |
-| **6** | 夕方(15°) | 5 | 0 | 50 | 0 | 10 | 10 | 🌫️ 夕方・軽い霧 |
-| **7** | 昼(45°) | 5 | 0 | 0 | 0 | 10 | 2 | ☀️ 晴れ・昼 |
-| **8** | 昼(45°) | 100 | 100 | 90 | 0 | 100 | 7 | ⛈️ 暴風雨 |
-| **9** | 昼(45°) | 70 | 60 | 60 | 0 | 60 | 50 | 🌧️🌫️ 雨+濃霧 |
-| **10** | 夜(0°) | 40 | 100 | 90 | 0 | 100 | 7 | 🌙⛈️ 夜・暴風雨 |
-| **11** | 昼(45°) | 100 | 60 | 60 | 0 | 60 | 50 | ☁️🌫️ 曇り+雨+濃霧 |
-| **12** | 昼(45°) | 5 | 0 | 0 | 0 | 10 | 50 | 🌫️ 晴れ+濃霧 |
-| **13** | 夕方(15°) | 5 | 0 | 0 | 0 | 10 | 50 | 🌅🌫️ 夕方+濃霧 |
-| **14** | 昼(45°) | 100 | 100 | 50 | 50 | 100 | 10 | ⛈️ 暴風雨・路面濡れ |
-| **15** | 昼(45°) | 100 | 50 | 100 | 80 | 80 | 10 | 🌧️ 雨・路面冠水 |
-| **18** | 夕方(15°) | 40 | 0 | 50 | 0 | 10 | 2 | 🌅☁️ 夕方・曇り |
-| **19** | 夜(-90°) | 40 | 0 | 50 | 0 | 10 | 2 | 🌙 夜・曇り |
-| **20** | 夜(-90°) | 60 | 30 | 50 | 60 | 30 | 3 | 🌙🌧️ 夜・小雨 |
-| **21** | 夜(-90°) | 100 | 100 | 90 | 100 | 100 | 3 | 🌙⛈️ 夜・暴風雨・路面冠水 |
-| **22** | 夜(-90°) | 5 | 0 | 0 | 0 | 10 | 60 | 🌙🌫️ 夜・濃霧 |
-| **23** | 夜(-90°) | 80 | 60 | 60 | 80 | 60 | 60 | 🌙🌧️🌫️ 夜・雨+濃霧 |
-| **25** | 夜(-90°) | 100 | 100 | 90 | 100 | 100 | 100 | 🌙⛈️🌫️ **最悪条件**（夜・暴風雨・濃霧MAX） |
-| **26** | 昼(70°) | 50 | 0 | 0 | 0 | 0 | 0 | ☀️ デフォルト晴れ |
-
-> **補足**: `sun_altitude_angle` の意味：90°=正午、45°=午後、15°=夕方、0°=日没、-90°=深夜。ID 4, 16, 17, 24 は欠番です。
+`references/weather.md`を参照。ID 0-26の天候プリセットがあり、晴れ・曇り・雨・霧などの組み合わせで多様な条件が用意されている
 
 ## Output Format
 上記のInput Formatをふまえ、以下のような指標を計算して出力する
@@ -255,7 +232,8 @@ $$\text{score\_penalty} = \prod_{i} p_i$$
 |---|---|---|
 |gpu_index|int|評価を実行したGPUのインデックス（eval_*.jsonの番号）|
 |success|bool|完走（statusが`Perfect`か`Completed`） and `min_speed_infractions`以外の違反0ならTrue、それ以外ならFalse|
-|score_penalty_orginal|float|以下のような外部yamlファイルから与えたpenalty乗数をもとに`records.infractions`から計算した`score_penalty`（`outside_route_lanes`は従来通り(1-逸脱割合)を使用し、`route_dev`,`vehicle_blocked`,`route_timeout`は従来通り）|
+|score_penalty_custom|float|以下のような外部yamlファイルから与えたpenalty乗数をもとに`records.infractions`から計算した`score_penalty`（`outside_route_lanes`は従来通り(1-逸脱割合)を使用し、`route_dev`,`vehicle_blocked`,`route_timeout`は従来通り）|
+|score_composed_custom|float|`score_route × score_penalty_custom`|
 
 ```yaml
 penalty_ratio:
@@ -275,6 +253,8 @@ penalty_ratio:
 |名称|計算方法|
 |---|---|
 |infractions|各違反のkmあたりの回数（`eval_*.json`の`global_record.infractions`と同じ計算法）|
-|scores_mean|各スコアの全ルート平均（`eval_*.json`の`global_record.scores_mean`と同じ計算法だが、`score_penalty_orginal`を計算対象に加える）|
-|scores_mean_220|各スコアの全ルート合計$\div 220$（元の3種類のスコア＋`score_penalty_orginal`が計算対象）|
+|scores_mean|各スコアの実行完了ルートでの平均（`eval_*.json`の`global_record.scores_mean`と同じ計算法だが、`score_penalty_custom`と`score_composed_custom`を計算対象に加える）|
+|scores_mean_planned|scores_meanの分母は実行完了ルートだが、この分母を実行予定ルート数に置き換えたもの（`score_route`, `score_penalty`, `score_composed`, `score_penalty_custom`, `score_composed_custom`が計算対象）|
+|success_rate|完走かつ`min_speed_infractions`以外の違反がゼロのルートの割合（分母は実行完了ルート数）|
+|success_rate_planned|完走かつ`min_speed_infractions`以外の違反がゼロのルートの割合（分母は実行予定ルート数）|
 |meta|全ルートでの`total_length`,`duration_game`,`duration_system`,`exceptions`|

@@ -1,9 +1,9 @@
 ---
-name: webapp-public-noauth-aws-small
+name: aws-webapp-noauth
 description: "公開の認証なしWebアプリケーションのインフラをAWSで構築するためのスキル。ユーザーが「Webアプリ」「インフラ」「AWS」「ECS」「Fargate」などに言及した際は必ずこのスキルを参照すること。"
 ---
 
-# webapp-public-noauth-aws-small
+# aws-webapp-noauth
 小規模のユーザ数を想定した、公開の認証なしWebアプリケーションのインフラをAWSで構築するためのスキル。以下構成のFastAPI/ReactアプリケーションをAWS ECS Fargate上で動かし、データベースにはAWS RDSのPostgreSQLを使用する構成を基本とする。
 - Database: PostgreSQL 16
 - Migration tool: Alembic
@@ -581,3 +581,42 @@ S3バケット`{project-name}-static`にも次のバケットポリシー（Clou
   ]
 }
 ```
+
+## Terraform
+このインフラ構成をコードで管理するため、Terraformを使用してIaC化する。以下の構成を基本とし、必要に応じて変更
+- Terraform version: 1.5.x
+- AWS provider version: 5.x
+- Directory structure:
+```
+terraform/
+├── terraform.tfvars (各種定数：.gitignore対象)
+├── terraform.tfvars.example (terraform.tfvarsのテンプレートファイル：gitignore対象外)
+├── main.tf (プロバイダー設定や共通リソース)
+├── vpc.tf (VPC、サブネット、セキュリティグループ、VPCエンドポイントなどのネットワークリソース)
+├── iam.tf (IAMロールやポリシーの定義)
+├── rds.tf (RDSインスタンスやサブネットグループ、パラメータグループの定義)
+├── ssm.tf (SSM Parameter Storeのパラメータ定義)
+├── s3.tf (S3バケットの定義)
+├── alb.tf (ALBとターゲットグループの定義)
+├── ecs.tf (ECSクラスター、タスク定義、サービスの定義)
+├── cloudfront.tf (CloudFrontディストリビューションの定義)
+├── variables.tf (変数定義)
+├── outputs.tf (出力定義)
+├── security_groups.tf (セキュリティグループの定義)
+├── vpc_endpoints.tf (VPCエンドポイントの定義)
+├── ecr.tf (ECRリポジトリの定義)
+├── cloudwatch.tf (CloudWatchの定義)
+├── deploy/              # デプロイ用一時リソース
+|   ├── main.tff (デプロイ用リソースの定義)
+|   ├── variables.tf (デプロイ用リソースの変数定義)
+|   └── vpc_endpoints_ecr.tf (ECR用VPCエンドポイントの定義)
+└── meintenance/         # 踏み台インスタンス用一時リソース
+    ├── main.tf (踏み台インスタンス用リソースの定義)
+    ├── variables.tf (踏み台インスタンス用リソースの変数定義)
+    └── ec2.tf (踏み台インスタンスの定義)
+```
+各ファイルの詳細は`references/terraform/`ディレクトリ内のファイルを参照
+
+### セットアップ
+- `references/Makefile`を参考に、リソースの作成や削除、Webアプリのデプロイ、踏み台インスタンスの起動・停止などのコマンドをMakefileに定義しておく
+- Makefileで使用するAWSのアカウント情報は.env.makeに記載し、Makefile内で読み込むようにする（.env.makeは.gitignore対象）。内容は`references/.env.make.example`を参照

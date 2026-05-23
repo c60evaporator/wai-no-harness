@@ -144,6 +144,9 @@ Sample画面の点群・BBox等の可視性を管理する。
   - ホバー時 → 白半透明 (+60/255) でうっすら明るくなる（autoHighlight）
   - クリック後 → 白い太アウトラインが最前面に重なり選択状態を永続表示
   - 別の場所をクリック → 選択解除（他のオブジェクトを選択した場合は新しい選択に切り替わる）
+- フィーチャーの描画順は、フィーチャーの種類ごとに`frontend/config/settings.yml`でリスト指定できるようにする
+  - 例：`featureDrawOrder: [road_segment, lane, road_divider, lane_divider, ped_crossing]`
+  - 順序は上から下に描画される順番を指定する（上の方にあるものほど下に描画される）
 
 ### センサ画像へのオーバーレイ描画（2D）
 - Polygon / LineString / Point / 2D BBoxを対象とする
