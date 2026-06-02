@@ -30,6 +30,7 @@ root/
     ├── postcss.config.js
     ├── nginx.conf
     ├── src/
+    │   ├── assets/         # 画像やヘッダーアイコンなどの静的リソース
     │   ├── types/          # 型定義（バックエンドschemas/と対応）
     │   │   └── 各リソースの型定義用tsファイル
     │   ├── api/            # TanStack Query hooks + apiFetch
@@ -56,6 +57,8 @@ root/
     │   └── unit/
     │       ├── lib/        # coordinateUtils.test.ts, canvasUtils.test.ts
     │       └── store/      # navigationStore.test.ts
+    ├── public/
+    │   └── favicon.ico  # アプリのファビコン
     └── config/
         └── settings.yml    # アプリ全体の設定ファイル（例：APIのbaseURLなど）
 
@@ -82,6 +85,7 @@ root/
   - 左端: プルダウンで最上位のリソースを選択
   - 残り: 各画面を遷移させるタブ
   - アクティブタブは青文字
+  - ヘッダーのアイコンについては`references/icon`参照
 - 左ペイン: 上部フィルタ群（濃いグレー背景） + リスト（白背景・枠線あり）
 - 左ペインのリストアイテムクリックで中央ペインの内容が切り替わる動作が基本
 - 中央ペイン: 地図描画（Deck.gl or Canvas）、カメラ等の画像表示、その他ビジュアライゼーション
