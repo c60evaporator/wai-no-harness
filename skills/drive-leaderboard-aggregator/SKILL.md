@@ -198,6 +198,10 @@ $$\text{score\_penalty} = \prod_{i} p_i$$
 
 例えば歩行者衝突（$p_i=0.5$）が2回、車両衝突（$p_i=0.6$）が1回起こった場合、$0.5 \times 0.5 \times 0.6 = 0.15$が`score_penalty`になる
 
+なお参考として、CARLA Leaderboard2.1では以下の計算式に修正されている（完走せずに評価を終了してスコアを上げるハックを防ぐため。[参考](https://leaderboard.carla.org/#carla-ad-leaderboard-21)）
+
+$$\text{score\_penalty} = \frac{1}{1+\sum_{i} p_i}$$
+
 ##### 違反の種類とペナルティの詳細
 `global_record.infractions`や`records.infractions`フィールドに記載される違反の詳細は以下（penalty乗数は動的に変更できるが、ここではBench2Driveでの値を記載）
 
