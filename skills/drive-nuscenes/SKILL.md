@@ -56,17 +56,17 @@ root
     ├─ 37819e65e09e5547b8a3ceaefba56bb2.png <- singapore-onenorthのbasemap画像
     ├─ 53992ee3023e5494b90c316c183be829.png <- singapore-hollandvillageのbasemap画像
     ├─ 93406b464a165eaba6d9de76ca09f5da.png <- singapore-queenstownのbasemap画像
-    ├─ basemap <- Map Expansionのマップ高精細画像
+    ├─ basemap <- Map expansionのマップ高精細画像
     |   ├─ boston-seaport.png
     |   ├─ singapore-hollandvillage.png
     |   ├─ singapore-onenorth.png
     |   └─ singapore-queenstown.png
-    ├─ expansion <- Map Expansionのメタデータ
+    ├─ expansion <- Map expansionのメタデータ
     |   ├─ boston-seaport.json
     |   ├─ singapore-hollandvillage.json
     |   ├─ singapore-onenorth.json
     |   └─ singapore-queenstown.json
-    └─ prediction <- Map Expansionの予測タスクのアノテーション
+    └─ prediction <- Map expansionの予測タスクのアノテーション
         └─ prediction_scenes.json
 ```
 

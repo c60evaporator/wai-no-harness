@@ -1,5 +1,5 @@
 # metadata-fields.md
-nuScenes Map Expansionのメタデータの各フィールドの内容とフォーマットを記載
+nuScenes Map expansionのメタデータの各フィールドの内容とフォーマットを記載
 
 **トークンはすべてハイフン付きUUIDであることに注意**
 

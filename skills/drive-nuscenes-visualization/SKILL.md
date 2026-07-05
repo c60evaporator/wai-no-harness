@@ -1,10 +1,10 @@
 ---
 name: drive-nuscenes-visualization
-description: "nuScenesおよびMap Expansionデータを可視化する際の座標変換に関する説明。ユーザーが「nuScenes」「map expansion」「nuScenes map」などに言及した際は必ずこのスキルを参照すること。自動運転の地図処理・可視化・座標変換タスクにも適用する。"
+description: "nuScenesおよびMap expansionデータを可視化する際の座標変換に関する説明。ユーザーが「nuScenes」「map expansion」「nuScenes map」などに言及した際は必ずこのスキルを参照すること。自動運転の地図処理・可視化・座標変換タスクにも適用する。"
 ---
 
 # drive-nuscenes-visualization
-nuScenesおよびMap Expansionデータを可視化する際の座標変換に関する説明
+nuScenesおよびMap expansionデータを可視化する際の座標変換に関する説明
 
 ## 各データの座標変換
 グローバル座標（3Dバウンディングボックス等のアノテーションが従う座標系）と、各データの座標系との変換について、フロントエンド（React＋TypeScript）での描画を前提に説明する。
@@ -289,9 +289,9 @@ pt = lidar_rot.inverse.rotate(pt - lidar_trans)
 - RADARにはBBoxアノテーションを重ねない（アノテーションはLiDAR基準のため座標系が異なる）
 - RADARは点数が少ない（数十点）ためpointSizeを大きく（4px程度）設定するとよい
 
-### Map ExpansionとDeck.gl（WGS84）との組み合わせ
+### Map expansionとDeck.gl（WGS84）との組み合わせ
 
-Map ExpansionのGeoJSONをDeck.glで表示する場合、ローカルメートル座標→WGS84経緯度への変換が必要。
+Map expansionのGeoJSONをDeck.glで表示する場合、ローカルメートル座標→WGS84経緯度への変換が必要。
 各ロケーションのGPS原点を基準に線形近似で変換する：
 
 ```python

@@ -1,6 +1,6 @@
 ---
 name: drive-nuscenes-mapexpansion
-description: "nuScenes Map Expansionの構造とファイル形式の説明。ユーザーが「map expansion」「nuScenes map」「road segment」「drivable_area」「HD map」「UniAD」「Bench2Drive」などに言及した際は必ずこのスキルを参照すること。自動運転の地図処理・可視化・座標変換タスクにも適用する。"
+description: "nuScenes Map expansionの構造とファイル形式の説明。ユーザーが「map expansion」「nuScenes map」「road segment」「drivable_area」「HD map」「UniAD」「Bench2Drive」などに言及した際は必ずこのスキルを参照すること。自動運転の地図処理・可視化・座標変換タスクにも適用する。"
 ---
 
 ## フォルダ構成とファイル形式
@@ -13,17 +13,17 @@ root
 ├─ sweeps <- キーフレーム以外のセンサデータ（nuScenes本体のため省略）
 └─ maps
     :
-    ├─ basemap <- Map Expansionのマップ高精細画像 (.png)
+    ├─ basemap <- Map expansionのマップ高精細画像 (.png)
     |   ├─ boston-seaport.png
     |   ├─ singapore-hollandvillage.png
     |   ├─ singapore-onenorth.png
     |   └─ singapore-queenstown.png
-    ├─ expansion <- Map Expansionのメタデータ (.json)
+    ├─ expansion <- Map expansionのメタデータ (.json)
     |   ├─ boston-seaport.json
     |   ├─ singapore-hollandvillage.json
     |   ├─ singapore-onenorth.json
     |   └─ singapore-queenstown.json
-    └─ prediction <- Map Expansionの予測タスクのアノテーション (.json)
+    └─ prediction <- Map expansionの予測タスクのアノテーション (.json)
         └─ prediction_scenes.json
 ```
 
@@ -34,7 +34,7 @@ root
 |---|---|---|
 |メタデータ|.json|マップごとのアノテーション情報|
 |basemap|.png|ロケーションごとのマップ高精細画像（nuScenes本体のbasemapが白黒であるのに対し、本画像は高精細なLiDAR点群が描画されている）|
-|予測タスクのアノテーション|.json|Map Expansionの予測タスクのアノテーション情報|
+|予測タスクのアノテーション|.json|Map expansionの予測タスクのアノテーション情報|
 
 ## メタデータのフォーマット
 メタデータはマップごとに以下のJSON形式で保存されている。
@@ -253,12 +253,12 @@ erDiagram
 
 `references/metadata_fields.md`を参照すること
 
-## Map Expansionの座標系
-nuScenes Map Expansionのノード・ポリゴン座標は**ローカルメートル座標系**で格納されている。他の座標系との関係は以下の表の通り。
+## Map expansionの座標系
+nuScenes Map expansionのノード・ポリゴン座標は**ローカルメートル座標系**で格納されている。他の座標系との関係は以下の表の通り。
 
 | 座標系 | 単位 | 原点 | 用途 |
 |---|---|---|---|
-| Map Expansionノード座標 | メートル | マップ左下 | ポリゴン・レーン定義 |
+| Map expansionノード座標 | メートル | マップ左下 | ポリゴン・レーン定義 |
 | Ego pose グローバル座標 | メートル | 同上（同一座標系） | 自車位置・アノテーション |
 | basemap PNG画像 | ピクセル | 左上 | 背景地図画像 |
 | WGS84経緯度 | 度 | — | Deck.gl等の地図サービス |
